@@ -1,12 +1,13 @@
 #include <iostream>
-#include <queue>
+#include <vector>
 #include <iostream>
 #include <string>
 #include <cstring>
 #include <sstream>
 #include <cstdlib>
 #include <unistd.h>
-#include <filesystem>
+#include <sys/types.h>
+#include <sys/wait.h>
 using namespace std;
 
 void err_sys(const char* x) {
@@ -18,13 +19,17 @@ class CommandSuit {
     public:
         vector<string> words;
         char pipeType;
+        int pid;
+        int staticCountdown;
+        bool isNumPipe;
     private:
 };
 
 class PipeSuit {
     public:
-        int pipe[2];
+        int pipe[2]; // 0: input, 1: output
         int countdown;
+        // bool isNumPipe;
     private:
 };
 
@@ -52,11 +57,17 @@ int main() {
             }
             else if (tempWord[0] == '|' || tempWord[0] == '!') {
                 tempCommand->pipeType = tempWord[0];
+                PipeSuit* tempPipe = new PipeSuit;
                 if (tempWord.length() != 1) {
-                    PipeSuit* tempPipe = new PipeSuit;
                     tempPipe->countdown = stoi(tempWord.substr(1));
-                    multiPipe.push_back(tempPipe);
+                    tempCommand->isNumPipe = true;
                 }
+                else {
+                    tempPipe->countdown = 1;
+                    tempCommand->isNumPipe = false;
+                }
+                tempCommand->staticCountdown = tempPipe->countdown;
+                multiPipe.push_back(tempPipe);
                 multiCommand.push_back(tempCommand);
                 //delete tempCommand;
                 tempCommand = nullptr;
@@ -64,7 +75,8 @@ int main() {
             else
                 tempCommand->words.push_back(tempWord);
         }
-        multiCommand.push_back(tempCommand);
+        if (tempWord != ">" && tempWord[0] != '|' && tempWord[0] != '!')
+            multiCommand.push_back(tempCommand);
 
         // handle commandline
         if (multiCommand.size() && multiCommand[0]->words[0] == "exit")
@@ -72,14 +84,14 @@ int main() {
         else if (multiCommand.size() && multiCommand[0]->words[0] == "setenv") {
             setenv(multiCommand[0]->words[1].c_str(), multiCommand[0]->words[2].c_str(), 1);
             delete multiCommand[0];
-            multiCommand.erase(multiCommand.begin());
+            multiCommand.clear();
         }
         else if (multiCommand.size() && multiCommand[0]->words[0] == "printenv") {
             char* outputEnv = getenv(multiCommand[0]->words[1].c_str());
             if (outputEnv != NULL)
                 cout << (string)outputEnv << endl;
             delete multiCommand[0];
-            multiCommand.erase(multiCommand.begin());
+            multiCommand.clear();
         }
         else {
             // for(int i = 0; i < multiCommand.size(); i++) {
@@ -88,21 +100,60 @@ int main() {
             // }
             
             string execPath = getenv("PATH");
-            // int childpid, pipe1[2], pipe2[2];
-            // if (pipe(pipe1) || )
-            //     err_sys("can't create pipes");
+            for (vector<CommandSuit*>:: iterator it = multiCommand.begin(); it != multiCommand.end(); it++) {
+                int childpid, pipe1[2];
+                if (pipe(pipe1))
+                    err_sys("can't create pipes");
 
-            // if ((childpid = fork()) < 0) {
-            //     err_sys("can't fork");
-            // } else if (childpid > 0) {
-            //     // parent
-            // } else {
-            //     // child
-            //     execv();
-            // }
+                if ((childpid = fork()) < 0) {
+                    err_sys("can't fork");
+                } else if (childpid > 0) {
+                    // parent
+                    (*it)->pid = childpid;
+                    int status;
+                    if (it + 1 == multiCommand.end())
+                        waitpid((*it)->pid, &status, 0);
+                    else
+                        waitpid((*it)->pid, &status, WNOHANG);
+                } else {
+                    // child
+                    // command output to pipe
+                    if ((*it)->pipeType == '|') {
+                        close(1);
+                        bool isSamePipe = false;
+                        for(int i = 0; i < multiPipe.size(); i++) {
+                            if(multiPipe[i]->countdown == (*it)->staticCountdown) {
+                                dup(multiPipe[i]->pipe[1]);
+                                isSamePipe = true;
+                                break;
+                            }
+                        }
+                        if(!isSamePipe)
+                            dup(pipe1[1]);
+                    }
+                    // command input to pipe
+                    for(int i = 0; i < multiPipe.size(); i++) {
+                        if(multiPipe[i]->countdown == 1) {
+                            close(0);
+                            dup(multiPipe[i]->pipe[0]);
+                        }
+                        if ((*it)->isNumPipe || it + 1 == multiCommand.end())
+                            multiPipe[i]->countdown--;
+                    }
+
+                    // execute command
+                    string currentExecPath = execPath + (*it)->words[0];
+                    char **argv = new char*;
+                    for(int i = 1; i < (*it)->words.size(); i++)
+                        strcpy(*(argv+i), (*it)->words[1].c_str());
+                    
+                    if(execv(currentExecPath.c_str(), argv) == -1) {
+                        cerr << "Unknown command: [" << (*it)->words[0] << "].\n";
+                        exit(1);
+                    }
+                }
+            }
         }
-
-
         cout << "% ";
     }
     return 0;
