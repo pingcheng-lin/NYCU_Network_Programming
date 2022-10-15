@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 using namespace std;
@@ -22,6 +23,7 @@ class CommandSuit {
         int pid;
         int staticCountdown;
         bool isNumPipe;
+        string directFile;
     private:
 };
 
@@ -33,12 +35,18 @@ class PipeSuit {
     private:
 };
 
+void Sigchld_handler(int sig) {
+    int status;
+    while(waitpid(-1, &status,WNOHANG) > 0);
+}
+
 int main() {
     setenv("PATH", "bin:.", 1);
     cout << "% ";
     string commandline;
     vector<CommandSuit*> multiCommand;
     vector<PipeSuit*> multiPipe;
+    if (SIGCHLD, Sigchld_handler); 
     while (getline(cin, commandline)) {
         // remove whitespace and parse command
         stringstream ss;
@@ -51,8 +59,9 @@ int main() {
 
             if (tempWord == ">") {
                 tempCommand->pipeType = '>';
+                ss >> tempWord;
+                tempCommand->directFile = tempWord;
                 multiCommand.push_back(tempCommand);
-                //delete tempCommand;
                 tempCommand = nullptr;
             }
             else if (tempWord[0] == '|' || tempWord[0] == '!') {
@@ -94,11 +103,6 @@ int main() {
             multiCommand.clear();
         }
         else {
-            // for(int i = 0; i < multiCommand.size(); i++) {
-            //     for(int j = 0; j < multiCommand[i]->words.size(); j++)
-            //         cout << multiCommand[i]->words[j] << endl;
-            // }
-            
             string execPath = getenv("PATH");
             for (vector<CommandSuit*>:: iterator it = multiCommand.begin(); it != multiCommand.end(); it++) {
                 int childpid, pipe1[2];
@@ -141,18 +145,30 @@ int main() {
                             multiPipe[i]->countdown--;
                     }
 
+                    // command redirection
+                    if((*it)->pipeType == '>') {
+                        int fileFd = open((*it)->directFile.c_str(), O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC, S_IRUSR|S_IWUSR);
+                        close(1);
+                        dup(fileFd);
+                    }
+
                     // execute command
-                    string currentExecPath = execPath + (*it)->words[0];
-                    char **argv = new char*;
-                    for(int i = 1; i < (*it)->words.size(); i++)
-                        strcpy(*(argv+i), (*it)->words[1].c_str());
-                    
-                    if(execv(currentExecPath.c_str(), argv) == -1) {
+                    char **argv = new char*[128]();
+                    for(int i = 0; i < (*it)->words.size()+1; i++) {
+                        *(argv+i) = new char[256]();
+                        if(i == (*it)->words.size())
+                            *(argv+i) = NULL;
+                        else
+                            strcpy(*(argv+i), (*it)->words[i].c_str());
+                    }
+
+                    if(execvp((*it)->words[0].c_str(), argv) == -1) {
                         cerr << "Unknown command: [" << (*it)->words[0] << "].\n";
                         exit(1);
                     }
                 }
             }
+            multiCommand.clear();
         }
         cout << "% ";
     }
