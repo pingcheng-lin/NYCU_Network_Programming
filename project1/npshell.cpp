@@ -53,7 +53,9 @@ int main() {
         ss << commandline;
         string tempWord;
         CommandSuit *tempCommand = nullptr;
+        bool isLast = false; // check if '>' is the last command
         while (ss >> tempWord) {
+            isLast = false;
             if (tempCommand == nullptr)
                 tempCommand = new CommandSuit;
 
@@ -63,6 +65,7 @@ int main() {
                 tempCommand->directFile = tempWord;
                 multiCommand.push_back(tempCommand);
                 tempCommand = nullptr;
+                isLast = true;
             }
             else if (tempWord[0] == '|' || tempWord[0] == '!') {
                 tempCommand->pipeType = tempWord[0];
@@ -84,7 +87,7 @@ int main() {
             else
                 tempCommand->words.push_back(tempWord);
         }
-        if (tempWord != ">" && tempWord[0] != '|' && tempWord[0] != '!')
+        if (!isLast && tempWord[0] != '|' && tempWord[0] != '!')
             multiCommand.push_back(tempCommand);
 
         // handle commandline
@@ -128,18 +131,22 @@ int main() {
                         for(int i = 0; i < multiPipe.size(); i++) {
                             if(multiPipe[i]->countdown == (*it)->staticCountdown) {
                                 dup(multiPipe[i]->pipe[1]);
+                                close(multiPipe[i]->pipe[1]);
                                 isSamePipe = true;
                                 break;
                             }
                         }
-                        if(!isSamePipe)
+                        if(!isSamePipe) {
                             dup(pipe1[1]);
+                            close(pipe1[1]);
+                        }
                     }
                     // command input to pipe
                     for(int i = 0; i < multiPipe.size(); i++) {
                         if(multiPipe[i]->countdown == 1) {
                             close(0);
                             dup(multiPipe[i]->pipe[0]);
+                            close(multiPipe[i]->pipe[0]);
                         }
                         if ((*it)->isNumPipe || it + 1 == multiCommand.end())
                             multiPipe[i]->countdown--;
@@ -150,6 +157,7 @@ int main() {
                         int fileFd = open((*it)->directFile.c_str(), O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC, S_IRUSR|S_IWUSR);
                         close(1);
                         dup(fileFd);
+                        close(fileFd);
                     }
 
                     // execute command
@@ -161,11 +169,12 @@ int main() {
                         else
                             strcpy(*(argv+i), (*it)->words[i].c_str());
                     }
-
                     if(execvp((*it)->words[0].c_str(), argv) == -1) {
                         cerr << "Unknown command: [" << (*it)->words[0] << "].\n";
                         exit(1);
                     }
+                    
+                    exit(0);
                 }
             }
             multiCommand.clear();
