@@ -52,6 +52,10 @@ int main() {
     signal(SIGCHLD, Sigchld_handler); 
     while (getline(cin, commandline)) {
         // remove whitespace and parse command
+        if(commandline == "") {
+            cout << "% ";
+            continue;
+        }
         stringstream ss;
         ss << commandline;
         string tempWord;
@@ -136,7 +140,7 @@ int main() {
                     }
                 }
                 // num pipe merge
-                if ((*it)->pipeType == '|' && (*it)->isNumPipe) {
+                if (((*it)->pipeType == '|' || (*it)->pipeType == '!') && (*it)->isNumPipe) {
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if(!multiNumPipe[i]->isCountActive) {
                             multiNumPipe[i]->isCountActive = true;
@@ -209,9 +213,12 @@ int main() {
                 } else {
                     // child
                     // command output to pipe: pipe modification
-                    if((*it)->pipeType == '|') {
+                    if((*it)->pipeType == '|' || (*it)->pipeType == '!' ) {
                         close(1);
+                        if((*it)->pipeType == '!')
+                            close(2);
                         if((*it)->isNumPipe || isTargetPipeNumType) {
+                            dup(multiNumPipe[targetPipe]->pipe[1]);
                             dup(multiNumPipe[targetPipe]->pipe[1]);
                             close(multiNumPipe[targetPipe]->pipe[1]);
                         }
