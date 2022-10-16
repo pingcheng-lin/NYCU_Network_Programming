@@ -26,12 +26,18 @@ class CommandSuit {
         string directFile;
     private:
 };
-
 class PipeSuit {
     public:
         int pipe[2]; // 0: input, 1: output
+        bool isUsed = false;
+    private:
+};
+class NumPipeSuit {
+    public:
+        int pipe[2]; // 0: input, 1: output
         int countdown;
-        // bool isNumPipe;
+        bool isCountActive = false;
+        bool canDelete = false;
     private:
 };
 
@@ -46,7 +52,8 @@ int main() {
     string commandline;
     vector<CommandSuit*> multiCommand;
     vector<PipeSuit*> multiPipe;
-    if (SIGCHLD, Sigchld_handler); 
+    vector<NumPipeSuit*> multiNumPipe;
+    signal(SIGCHLD, Sigchld_handler); 
     while (getline(cin, commandline)) {
         // remove whitespace and parse command
         stringstream ss;
@@ -69,17 +76,18 @@ int main() {
             }
             else if (tempWord[0] == '|' || tempWord[0] == '!') {
                 tempCommand->pipeType = tempWord[0];
-                PipeSuit* tempPipe = new PipeSuit;
                 if (tempWord.length() != 1) {
+                    NumPipeSuit* tempPipe = new NumPipeSuit;    
                     tempPipe->countdown = stoi(tempWord.substr(1));
                     tempCommand->isNumPipe = true;
+                    tempCommand->staticCountdown = tempPipe->countdown;
+                    multiNumPipe.push_back(tempPipe);
                 }
                 else {
-                    tempPipe->countdown = 1;
+                    PipeSuit* tempPipe = new PipeSuit;
                     tempCommand->isNumPipe = false;
+                    multiPipe.push_back(tempPipe);
                 }
-                tempCommand->staticCountdown = tempPipe->countdown;
-                multiPipe.push_back(tempPipe);
                 multiCommand.push_back(tempCommand);
                 //delete tempCommand;
                 tempCommand = nullptr;
@@ -108,49 +116,132 @@ int main() {
         else {
             string execPath = getenv("PATH");
             for (vector<CommandSuit*>:: iterator it = multiCommand.begin(); it != multiCommand.end(); it++) {
-                int childpid, pipe1[2];
-                if (pipe(pipe1))
-                    err_sys("can't create pipes");
+                int childpid;
+                int currentNumPipeSuite;
+                int targetPipe = 0;
+                bool isTargetPipeNumType = false;
+                for(int i = 0; i < multiNumPipe.size(); i++) {
+                    if (multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
+                        multiNumPipe[i]->countdown--;
+                    }
+                }
+                // ordianry pipe merge
+                if ((*it)->pipeType == '|' && !(*it)->isNumPipe) {
+                    bool canMerge = false;
+                    if(multiNumPipe.size() > 0)
+                        for(int i = 0; multiNumPipe[i]->isCountActive; i++) {
+                            if(multiNumPipe[i]->countdown == 0) {
+                                cout << "WTF\n";
+                                canMerge = true;
+                                targetPipe = i;
+                                isTargetPipeNumType = true;
+                                break;
+                            }
+                        }
+                    if(!canMerge) {
+                        pipe(multiPipe[0]->pipe);
+                        cout << "canNotMerge\n";
+                    }
+                }
+                // num pipe merge
+                if ((*it)->pipeType == '|' && (*it)->isNumPipe) {
+                    for(int i = 0; i < multiNumPipe.size(); i++) {
+                        if(!multiNumPipe[i]->isCountActive) {
+                            multiNumPipe[i]->isCountActive = true;
+                            currentNumPipeSuite = i;
+                            break;
+                        }
+                    }
+
+                    targetPipe = currentNumPipeSuite;
+                    for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
+                        if(i != currentNumPipeSuite && multiNumPipe[i]->countdown == multiNumPipe[currentNumPipeSuite]->countdown) {
+                            multiNumPipe[currentNumPipeSuite]->canDelete = true;
+                            targetPipe = i;
+                            break;
+                        }
+                    }
+
+                    if(targetPipe == currentNumPipeSuite) {
+                        cout << ":\n";
+                        pipe(multiNumPipe[targetPipe]->pipe);
+                    } else {
+                        multiNumPipe.erase(multiNumPipe.begin()+currentNumPipeSuite);
+                    } 
+                }
+                
 
                 if ((childpid = fork()) < 0) {
                     err_sys("can't fork");
                 } else if (childpid > 0) {
                     // parent
                     (*it)->pid = childpid;
+
+                    //remove ordinary pipe
+                    if(multiPipe.size() > 0 && multiPipe[0]->isUsed) {
+                        close(multiPipe[0]->pipe[0]);
+                        cout << "erase\n";
+                        multiPipe.erase(multiPipe.begin());
+                    }
+                    if((*it)->pipeType == '|' && !(*it)->isNumPipe && !isTargetPipeNumType) {
+                        if(!multiPipe[0]->isUsed) {
+                            close(multiPipe[0]->pipe[1]);
+                            multiPipe[0]->isUsed = true;
+                        }
+                    }
+
+                    //remove num pipe
+                    for(int i = 0; i < multiNumPipe.size(); i++) {
+                        if(multiNumPipe[i]->countdown == 1 )
+                            close(multiNumPipe[i]->pipe[1]);
+                        if(multiNumPipe[i]->countdown == 0 )
+                            close(multiNumPipe[i]->pipe[0]);
+                    }
+                    for(int i = 0; i < multiNumPipe.size(); i++)
+                        if(multiNumPipe[i]->countdown == 0 || multiNumPipe[i]->canDelete) {
+                            multiNumPipe.erase(multiNumPipe.begin()+i);
+                        }
+
                     int status;
                     if (it + 1 == multiCommand.end())
                         waitpid((*it)->pid, &status, 0);
                     else
                         waitpid((*it)->pid, &status, WNOHANG);
+                    
                 } else {
                     // child
-                    // command output to pipe
-                    if ((*it)->pipeType == '|') {
+                    // command output to pipe: pipe modification
+                    if((*it)->pipeType == '|') {
                         close(1);
-                        bool isSamePipe = false;
-                        for(int i = 0; i < multiPipe.size(); i++) {
-                            if(multiPipe[i]->countdown == (*it)->staticCountdown) {
-                                dup(multiPipe[i]->pipe[1]);
-                                close(multiPipe[i]->pipe[1]);
-                                isSamePipe = true;
+                        cerr << (*it)->isNumPipe << isTargetPipeNumType <<endl;
+                        if((*it)->isNumPipe || isTargetPipeNumType) {
+                            cerr << targetPipe<<"qwe\n";
+                            dup(multiNumPipe[targetPipe]->pipe[1]);
+                            close(multiNumPipe[targetPipe]->pipe[1]);
+                        }
+                        else {
+                            cerr << "qwewqeqwe\n";
+                            dup(multiPipe[0]->pipe[1]);
+                            close(multiPipe[0]->pipe[1]);
+                        }
+                    }  
+                    // command input from pipe: pipe modification
+                    if(multiPipe.size() > 0 && multiPipe[0]->isUsed) {
+                        cerr << isTargetPipeNumType<<"aaa\n";
+                        close(0);
+                        dup(multiPipe[0]->pipe[0]);
+                        close(multiPipe[0]->pipe[0]);
+                    }
+                    else 
+                        for(int i = 0; i < multiNumPipe.size(); i++) {
+                            if(multiNumPipe[i]->countdown == 0) {
+                                cerr << isTargetPipeNumType<<"ddd\n";
+                                close(0);
+                                dup(multiNumPipe[i]->pipe[0]);
+                                close(multiNumPipe[i]->pipe[0]);
                                 break;
                             }
                         }
-                        if(!isSamePipe) {
-                            dup(pipe1[1]);
-                            close(pipe1[1]);
-                        }
-                    }
-                    // command input to pipe
-                    for(int i = 0; i < multiPipe.size(); i++) {
-                        if(multiPipe[i]->countdown == 1) {
-                            close(0);
-                            dup(multiPipe[i]->pipe[0]);
-                            close(multiPipe[i]->pipe[0]);
-                        }
-                        if ((*it)->isNumPipe || it + 1 == multiCommand.end())
-                            multiPipe[i]->countdown--;
-                    }
 
                     // command redirection
                     if((*it)->pipeType == '>') {
@@ -173,7 +264,6 @@ int main() {
                         cerr << "Unknown command: [" << (*it)->words[0] << "].\n";
                         exit(1);
                     }
-                    
                     exit(0);
                 }
             }
