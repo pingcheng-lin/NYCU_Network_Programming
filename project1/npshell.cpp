@@ -120,7 +120,6 @@ int main() {
                 int targetPipe = 0;
                 bool isTargetPipeNumType = false;
                 
-                cout << multiPipe.size() << " " << multiNumPipe.size() << endl;
                 // ordianry pipe merge
                 if ((*it)->pipeType == '|' && !(*it)->isNumPipe) {
                     bool canMerge = false;
@@ -158,12 +157,10 @@ int main() {
                             break;
                         }
                     }
-                    cout << "targetPipe: " << targetPipe << endl;
 
                     if(targetPipe == currentNumPipeSuite) {
                         pipe(multiNumPipe[targetPipe]->pipe);
                     } else {
-                        cout << "check\n";
                         multiNumPipe.erase(multiNumPipe.begin()+currentNumPipeSuite);
                     } 
                 }
@@ -205,7 +202,6 @@ int main() {
 
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if (multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
-                            cout << "minux\n";
                             multiNumPipe[i]->countdown--;
                         }
                     }
@@ -225,9 +221,6 @@ int main() {
                             dup(multiNumPipe[targetPipe]->pipe[1]);
                         }
                         if((*it)->isNumPipe || isTargetPipeNumType) {
-                            if(isTargetPipeNumType)
-                                cerr << "WTD\n";
-                            cerr << "123\n";
                             dup(multiNumPipe[targetPipe]->pipe[1]);
                             close(multiNumPipe[targetPipe]->pipe[1]);
                         }
