@@ -118,32 +118,17 @@ int main() {
                 int childpid;
                 int currentNumPipeSuite;
                 int targetPipe = 0;
-                bool isTargetPipeNumType = false;
                 
                 // ordianry pipe merge
                 if ((*it)->pipeType == '|' && !(*it)->isNumPipe) {
-                    bool canMerge = false;
-                    if(multiNumPipe.size() > 0)
-                        for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
-                            if(multiNumPipe[i]->countdown == 0) {
-                                canMerge = true;
-                                targetPipe = i;
-                                isTargetPipeNumType = true;
-                                multiPipe.erase(multiPipe.begin());
-                                break;
-                            }
-                        }
-
-                    if(!canMerge) {
-                        if(multiPipe[0]->isUsed)
-                            pipe(multiPipe[1]->pipe);
-                        else
-                            pipe(multiPipe[0]->pipe);
-                    }
+                    if(multiPipe[0]->isUsed)
+                        pipe(multiPipe[1]->pipe);
+                    else
+                        pipe(multiPipe[0]->pipe);
                 }
 
                 // num pipe merge
-                if (((*it)->pipeType == '|' || (*it)->pipeType == '!') && (*it)->isNumPipe) {
+                if ((*it)->isNumPipe) {
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if(!multiNumPipe[i]->isCountActive) {
                             multiNumPipe[i]->isCountActive = true;
@@ -154,7 +139,6 @@ int main() {
 
                     targetPipe = currentNumPipeSuite;
                     for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
-                        
                         if(i != currentNumPipeSuite && multiNumPipe[i]->countdown == multiNumPipe[currentNumPipeSuite]->countdown) {
                             targetPipe = i;
                             break;
@@ -181,7 +165,7 @@ int main() {
                         close(multiPipe[0]->pipe[0]);
                         multiPipe.erase(multiPipe.begin());
                     }
-                    if((*it)->pipeType == '|' && !(*it)->isNumPipe && !isTargetPipeNumType) {
+                    if((*it)->pipeType == '|' && !(*it)->isNumPipe) {
                         if(!multiPipe[0]->isUsed) {
                             close(multiPipe[0]->pipe[1]);
                             multiPipe[0]->isUsed = true;
@@ -191,17 +175,14 @@ int main() {
                     //remove num pipe
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         // if()
-                        if(multiNumPipe[i]->isCountActive && multiNumPipe[i]->countdown == 1){
+                        if((*it)->isNumPipe && multiNumPipe[i]->isCountActive && multiNumPipe[i]->countdown == 1){
                             close(multiNumPipe[i]->pipe[1]);
                         }
                         if(multiNumPipe[i]->countdown == 0) {
                             close(multiNumPipe[i]->pipe[0]);
-                        }
-                    }
-                    for(int i = 0; i < multiNumPipe.size(); i++)
-                        if(multiNumPipe[i]->countdown == 0) {
                             multiNumPipe.erase(multiNumPipe.begin() + i);
                         }
+                    }
 
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if (multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
@@ -223,7 +204,7 @@ int main() {
                             close(2);
                             dup(multiNumPipe[targetPipe]->pipe[1]);
                         }
-                        if((*it)->isNumPipe || isTargetPipeNumType) {
+                        if((*it)->isNumPipe) {
                             dup(multiNumPipe[targetPipe]->pipe[1]);
                             close(multiNumPipe[targetPipe]->pipe[1]);
                         }
@@ -244,15 +225,14 @@ int main() {
                         dup(multiPipe[0]->pipe[0]);
                         close(multiPipe[0]->pipe[0]);
                     }
-                    else 
-                        for(int i = 0; i < multiNumPipe.size(); i++) {
-                            if(multiNumPipe[i]->countdown == 0) {
-                                close(0);
-                                dup(multiNumPipe[i]->pipe[0]);
-                                close(multiNumPipe[i]->pipe[0]);
-                                break;
-                            }
+                    for(int i = 0; i < multiNumPipe.size(); i++) {
+                        if(multiNumPipe[i]->countdown == 0) {
+                            close(0);
+                            dup(multiNumPipe[i]->pipe[0]);
+                            close(multiNumPipe[i]->pipe[0]);
+                            break;
                         }
+                    }
 
                     // command redirection
                     if((*it)->pipeType == '>') {
