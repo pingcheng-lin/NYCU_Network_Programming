@@ -124,7 +124,7 @@ int main() {
                 if ((*it)->pipeType == '|' && !(*it)->isNumPipe) {
                     bool canMerge = false;
                     if(multiNumPipe.size() > 0)
-                        for(int i = 0; multiNumPipe[i]->isCountActive; i++) {
+                        for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
                             if(multiNumPipe[i]->countdown == 0) {
                                 canMerge = true;
                                 targetPipe = i;
@@ -132,6 +132,7 @@ int main() {
                                 break;
                             }
                         }
+
                     if(!canMerge) {
                         if(multiPipe[0]->isUsed)
                             pipe(multiPipe[1]->pipe);
@@ -139,6 +140,7 @@ int main() {
                             pipe(multiPipe[0]->pipe);
                     }
                 }
+
                 // num pipe merge
                 if (((*it)->pipeType == '|' || (*it)->pipeType == '!') && (*it)->isNumPipe) {
                     for(int i = 0; i < multiNumPipe.size(); i++) {
