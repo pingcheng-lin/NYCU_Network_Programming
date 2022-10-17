@@ -125,7 +125,7 @@ int main() {
                     bool canMerge = false;
                     if(multiNumPipe.size() > 0)
                         for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
-                            if(multiNumPipe[i]->countdown == 1) {
+                            if(multiNumPipe[i]->countdown == 0) {
                                 canMerge = true;
                                 targetPipe = i;
                                 isTargetPipeNumType = true;
