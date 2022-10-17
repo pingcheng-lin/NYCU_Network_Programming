@@ -174,16 +174,15 @@ int main() {
 
                     //remove num pipe
                     for(int i = 0; i < multiNumPipe.size(); i++) {
-                        // if()
-                        if((*it)->isNumPipe && multiNumPipe[i]->isCountActive && multiNumPipe[i]->countdown == 1){
+                        if(multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end()) && multiNumPipe[i]->countdown == 1){
                             close(multiNumPipe[i]->pipe[1]);
                         }
                         if(multiNumPipe[i]->countdown == 0) {
                             close(multiNumPipe[i]->pipe[0]);
                             multiNumPipe.erase(multiNumPipe.begin() + i);
+                            i--;
                         }
                     }
-
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if (multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
                             multiNumPipe[i]->countdown--;
