@@ -126,8 +126,6 @@ int main() {
                     if(multiNumPipe.size() > 0)
                         for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
                             if(multiNumPipe[i]->countdown == 1) {
-                                cout << "canMerge\n";
-                                
                                 canMerge = true;
                                 targetPipe = i;
                                 isTargetPipeNumType = true;
