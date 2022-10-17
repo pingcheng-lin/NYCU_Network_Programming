@@ -119,13 +119,14 @@ int main() {
                 int currentNumPipeSuite;
                 int targetPipe = 0;
                 bool isTargetPipeNumType = false;
-
+                
+                cout << multiPipe.size() << " " << multiNumPipe.size() << endl;
                 // ordianry pipe merge
                 if ((*it)->pipeType == '|' && !(*it)->isNumPipe) {
                     bool canMerge = false;
                     if(multiNumPipe.size() > 0)
                         for(int i = 0; multiNumPipe[i]->isCountActive; i++) {
-                            if(multiNumPipe[i]->countdown == 1) {
+                            if(multiNumPipe[i]->countdown == 0) {
                                 canMerge = true;
                                 targetPipe = i;
                                 isTargetPipeNumType = true;
@@ -151,15 +152,18 @@ int main() {
 
                     targetPipe = currentNumPipeSuite;
                     for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
+                        
                         if(i != currentNumPipeSuite && multiNumPipe[i]->countdown == multiNumPipe[currentNumPipeSuite]->countdown) {
                             targetPipe = i;
                             break;
                         }
                     }
+                    cout << "targetPipe: " << targetPipe << endl;
 
                     if(targetPipe == currentNumPipeSuite) {
                         pipe(multiNumPipe[targetPipe]->pipe);
                     } else {
+                        cout << "check\n";
                         multiNumPipe.erase(multiNumPipe.begin()+currentNumPipeSuite);
                     } 
                 }
@@ -201,6 +205,7 @@ int main() {
 
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if (multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
+                            cout << "minux\n";
                             multiNumPipe[i]->countdown--;
                         }
                     }
@@ -215,10 +220,14 @@ int main() {
                     // command output to pipe: pipe modification
                     if((*it)->pipeType == '|' || (*it)->pipeType == '!' ) {
                         close(1);
-                        if((*it)->pipeType == '!')
+                        if((*it)->pipeType == '!') {
                             close(2);
-                        if((*it)->isNumPipe || isTargetPipeNumType) {
                             dup(multiNumPipe[targetPipe]->pipe[1]);
+                        }
+                        if((*it)->isNumPipe || isTargetPipeNumType) {
+                            if(isTargetPipeNumType)
+                                cerr << "WTD\n";
+                            cerr << "123\n";
                             dup(multiNumPipe[targetPipe]->pipe[1]);
                             close(multiNumPipe[targetPipe]->pipe[1]);
                         }
