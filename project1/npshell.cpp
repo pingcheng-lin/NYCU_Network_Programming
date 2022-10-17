@@ -128,7 +128,7 @@ int main() {
                 }
 
                 // num pipe merge
-                if ((*it)->isNumPipe) {
+                if (((*it)->pipeType == '|' || (*it)->pipeType == '!') && (*it)->isNumPipe) {
                     for(int i = 0; i < multiNumPipe.size(); i++) {
                         if(!multiNumPipe[i]->isCountActive) {
                             multiNumPipe[i]->isCountActive = true;
@@ -152,7 +152,6 @@ int main() {
                     } 
                 }
                 
-
                 if ((childpid = fork()) < 0) {
                     perror("can't fork");
                     exit(1);
