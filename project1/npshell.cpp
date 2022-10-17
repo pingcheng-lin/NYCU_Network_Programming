@@ -271,6 +271,7 @@ int main() {
                             strcpy(*(argv+i), (*it)->words[i].c_str());
                     }
                     if(execvp((*it)->words[0].c_str(), argv) == -1) {
+                        cerr << "Unknown command: [" << (*it)->words[0] << "]." << endl;
                         exit(1);
                     }
                     exit(0);
