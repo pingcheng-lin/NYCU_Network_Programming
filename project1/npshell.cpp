@@ -16,7 +16,6 @@ class CommandSuit {
         vector<string> words;
         char pipeType;
         int pid;
-        int staticCountdown;
         bool isNumPipe;
         string directFile;
     private:
@@ -80,7 +79,6 @@ int main() {
                     NumPipeSuit* tempPipe = new NumPipeSuit;    
                     tempPipe->countdown = stoi(tempWord.substr(1));
                     tempCommand->isNumPipe = true;
-                    tempCommand->staticCountdown = tempPipe->countdown;
                     multiNumPipe.push_back(tempPipe);
                 }
                 else {
