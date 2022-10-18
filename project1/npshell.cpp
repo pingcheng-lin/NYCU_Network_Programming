@@ -188,7 +188,7 @@ int main() {
                         }
                     }
                     int status;
-                    if (it + 1 == multiCommand.end() && (*it)->isNumPipe)
+                    if (it + 1 == multiCommand.end() && !(*it)->isNumPipe)
                         waitpid((*it)->pid, &status, 0);
                     
                 } else {
