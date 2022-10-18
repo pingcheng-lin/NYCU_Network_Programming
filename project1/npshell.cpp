@@ -153,7 +153,8 @@ int main() {
                 }
                 
                 if ((childpid = fork()) < 0) {
-                    perror("can't fork");
+                    int status;
+                    while(waitpid(-1, &status,WNOHANG) > 0);
                     exit(1);
                 } else if (childpid > 0) {
                     // parent
