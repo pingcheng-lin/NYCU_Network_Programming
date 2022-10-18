@@ -151,12 +151,12 @@ int main() {
                         multiNumPipe.erase(multiNumPipe.begin()+currentNumPipeSuite);
                     } 
                 }
-                
-                if ((childpid = fork()) < 0) {
-                    int status;
-                    while(waitpid(-1, &status,WNOHANG) > 0);
-                    exit(1);
-                } else if (childpid > 0) {
+                childpid = fork();
+                while (childpid < 0) {
+                    usleep(1000);
+                    childpid = fork();
+                }
+                if (childpid > 0) {
                     // parent
                     (*it)->pid = childpid;
 
