@@ -257,6 +257,7 @@ int main() {
             }
             multiCommand.clear();
         }
+        usleep(10000);
         cout << "% ";
     }
     return 0;
