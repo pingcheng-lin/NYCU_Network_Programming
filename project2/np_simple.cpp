@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <netinet/in.h>
+#include <arpa/inet.h> 
 using namespace std;
 
 class CommandSuit {
@@ -41,7 +43,7 @@ void Sigchld_handler(int sig) {
     while(waitpid(-1, &status,WNOHANG) > 0);
 }
 
-int main() {
+void npshell() {
     setenv("PATH", "bin:.", 1);
     cout << "% ";
     string commandline;
@@ -113,7 +115,7 @@ int main() {
         else {
             string execPath = getenv("PATH");
             for (vector<CommandSuit*>:: iterator it = multiCommand.begin(); it != multiCommand.end(); it++) {
-                int childpid;
+                int shellChildpid;
                 int currentNumPipeSuite;
                 int targetPipe = 0;
                 
@@ -149,14 +151,14 @@ int main() {
                         multiNumPipe.erase(multiNumPipe.begin()+currentNumPipeSuite);
                     } 
                 }
-                childpid = fork();
-                while (childpid < 0) {
+                shellChildpid = fork();
+                while (shellChildpid < 0) {
                     usleep(1000);
-                    childpid = fork();
+                    shellChildpid = fork();
                 }
-                if (childpid > 0) {
+                if (shellChildpid > 0) {
                     // parent
-                    (*it)->pid = childpid;
+                    (*it)->pid = shellChildpid;
 
                     //remove ordinary pipe
                     if(multiPipe.size() > 0 && multiPipe[0]->isUsed) {
@@ -259,6 +261,62 @@ int main() {
         }
         usleep(10000);
         cout << "% ";
+    }
+}
+
+int main(int argc, char *argv[]) {
+    int sockfd, newsockfd, cli_len, childpid;
+    struct sockaddr_in srv_addr, cli_addr;
+
+    // Open a TCP socket
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("server: can't open stream socket");
+        exit(1);
+    }
+
+    // Build our local address so that the client can send to us
+    bzero((char*) &srv_addr, sizeof(srv_addr));
+    srv_addr.sin_family = AF_INET;
+    srv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    srv_addr.sin_port = htons(atoi(argv[1]));
+    
+    int flag = 1;
+    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(int)) < 0) {
+        perror("setsockopt");
+        exit(1);
+    }
+
+    if(bind(sockfd, (struct sockaddr*) &srv_addr, sizeof(srv_addr)) < 0) {
+        perror("server: can't bind local address");
+        exit(1);
+    }
+
+    if(listen(sockfd, 1) < 0) {
+        perror("listen");
+        exit(1);
+    }
+
+    while(1) {
+        cli_len = sizeof(cli_addr);
+        newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, (socklen_t*) &cli_len);
+        if(newsockfd < 0) {
+            perror("server: accept error");
+            exit(1);
+        }
+
+        while ((childpid = fork()) < 0) {
+            usleep(1000);
+            childpid = fork();
+        }
+        if(childpid == 0) { // child process
+            dup2(newsockfd, 0);
+            dup2(newsockfd, 1);
+            dup2(newsockfd, 2);
+            close(newsockfd);
+            close(sockfd);
+            npshell();
+        }
+        close(newsockfd);
     }
     return 0;
 }
