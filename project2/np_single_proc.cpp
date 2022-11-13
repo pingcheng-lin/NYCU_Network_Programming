@@ -580,15 +580,14 @@ int main(int argc, char *argv[]) {
         for(int index = 0; index < 30; index++)
             if(usersInfo[index].fd > max)
                 max = usersInfo[index].fd;
-        struct timeval tv = {0, 0};
         
-        int err,stat;
-        do{
-            stat = select(max + 1, &rfds, (fd_set *)0, (fd_set *)0, (struct timeval *)0);
-            if( stat< 0) err = errno;
-        } while ((stat < 0) && (err == EINTR)); 
-        if (stat < 0)
-            perror("select fail");
+        int temp = -1, err = EINTR;
+        while ((temp < 0) && (err == EINTR)) {
+            temp = select(max + 1, &rfds, (fd_set *)0, (fd_set *)0, (struct timeval *)0);
+            if(temp < 0) {
+                err = errno;
+            }
+        };
 
         if(FD_ISSET(msock, &rfds)) {
             int ssock;
