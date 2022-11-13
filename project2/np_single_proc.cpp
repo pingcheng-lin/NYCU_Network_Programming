@@ -81,23 +81,29 @@ void broadcast(string msg) {
     }
 }
 
+vector<UserPipeSuit*> userPipe;
+vector<NumPipeSuit*>* multiNumPipeForUser[30];
+
 void initInfo(int index) {
     usersInfo[index].isExist = false;
     usersInfo[index].fd = -1;
     usersInfo[index].nickname = "(no name)";
     usersInfo[index].address = "";
     usersInfo[index].env.clear();
+
+    delete multiNumPipeForUser[index];
+    multiNumPipeForUser[index] = new vector<NumPipeSuit*>;
 }
 
-vector<UserPipeSuit*> userPipe;
+
 void npshell(int srcIndex) {
     // dup2(usersInfo[srcIndex].fd, 0);
     dup2(usersInfo[srcIndex].fd, 1);
     dup2(usersInfo[srcIndex].fd, 2);
-
     vector<CommandSuit*> multiCommand;
     vector<PipeSuit*> multiPipe;
-    vector<NumPipeSuit*> multiNumPipe;
+    vector<NumPipeSuit*>* multiNumPipe = multiNumPipeForUser[srcIndex];
+    
     signal(SIGCHLD, Sigchld_handler);
     clearenv();
     for(map<string, string>::iterator it = usersInfo[srcIndex].env.begin(); it != usersInfo[srcIndex].env.end(); it++) {
@@ -218,7 +224,7 @@ void npshell(int srcIndex) {
                 NumPipeSuit* tempPipe = new NumPipeSuit;    
                 tempPipe->countdown = stoi(tempWord.substr(1));
                 tempCommand->isNumPipe = true;
-                multiNumPipe.push_back(tempPipe);
+                (*multiNumPipe).push_back(tempPipe);
             }
             else {
                 PipeSuit* tempPipe = new PipeSuit;
@@ -325,26 +331,26 @@ void npshell(int srcIndex) {
 
             // num pipe merge
             if (((*it)->pipeType == '|' || (*it)->pipeType == '!') && (*it)->isNumPipe) {
-                for(int i = 0; i < multiNumPipe.size(); i++) {
-                    if(!multiNumPipe[i]->isCountActive) {
-                        multiNumPipe[i]->isCountActive = true;
+                for(int i = 0; i < (*multiNumPipe).size(); i++) {
+                    if(!(*multiNumPipe)[i]->isCountActive) {
+                        (*multiNumPipe)[i]->isCountActive = true;
                         currentNumPipeSuite = i;
                         break;
                     }
                 }
 
                 targetPipe = currentNumPipeSuite;
-                for(int i = 0; i < multiNumPipe.size() && multiNumPipe[i]->isCountActive; i++) {
-                    if(i != currentNumPipeSuite && multiNumPipe[i]->countdown == multiNumPipe[currentNumPipeSuite]->countdown) {
+                for(int i = 0; i < (*multiNumPipe).size() && (*multiNumPipe)[i]->isCountActive; i++) {
+                    if(i != currentNumPipeSuite && (*multiNumPipe)[i]->countdown == (*multiNumPipe)[currentNumPipeSuite]->countdown) {
                         targetPipe = i;
                         break;
                     }
                 }
 
                 if(targetPipe == currentNumPipeSuite) {
-                    pipe(multiNumPipe[targetPipe]->pipe);
+                    pipe((*multiNumPipe)[targetPipe]->pipe);
                 } else {
-                    multiNumPipe.erase(multiNumPipe.begin()+currentNumPipeSuite);
+                    (*multiNumPipe).erase((*multiNumPipe).begin()+currentNumPipeSuite);
                 } 
             }
 
@@ -370,19 +376,19 @@ void npshell(int srcIndex) {
                 }
 
                 //remove num pipe
-                for(int i = 0; i < multiNumPipe.size(); i++) {
-                    if(multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end()) && multiNumPipe[i]->countdown == 1){
-                        close(multiNumPipe[i]->pipe[1]);
+                for(int i = 0; i < (*multiNumPipe).size(); i++) {
+                    if((*multiNumPipe)[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end()) && (*multiNumPipe)[i]->countdown == 1){
+                        close((*multiNumPipe)[i]->pipe[1]);
                     }
-                    if(multiNumPipe[i]->countdown == 0) {
-                        close(multiNumPipe[i]->pipe[0]);
-                        multiNumPipe.erase(multiNumPipe.begin() + i);
+                    if((*multiNumPipe)[i]->countdown == 0) {
+                        close((*multiNumPipe)[i]->pipe[0]);
+                        (*multiNumPipe).erase((*multiNumPipe).begin() + i);
                         i--;
                     }
                 }
-                for(int i = 0; i < multiNumPipe.size(); i++) {
-                    if (multiNumPipe[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
-                        multiNumPipe[i]->countdown--;
+                for(int i = 0; i < (*multiNumPipe).size(); i++) {
+                    if ((*multiNumPipe)[i]->isCountActive && ((*it)->isNumPipe || it + 1 == multiCommand.end())) {
+                        (*multiNumPipe)[i]->countdown--;
                     }
                 }
 
@@ -418,11 +424,11 @@ void npshell(int srcIndex) {
                     close(1);
                     if((*it)->pipeType == '!') {
                         close(2);
-                        dup(multiNumPipe[targetPipe]->pipe[1]);
+                        dup((*multiNumPipe)[targetPipe]->pipe[1]);
                     }
                     if((*it)->isNumPipe) {
-                        dup(multiNumPipe[targetPipe]->pipe[1]);
-                        close(multiNumPipe[targetPipe]->pipe[1]);
+                        dup((*multiNumPipe)[targetPipe]->pipe[1]);
+                        close((*multiNumPipe)[targetPipe]->pipe[1]);
                     }
                     else {
                         if(multiPipe[0]->isUsed) {
@@ -441,11 +447,11 @@ void npshell(int srcIndex) {
                     dup(multiPipe[0]->pipe[0]);
                     close(multiPipe[0]->pipe[0]);
                 }
-                for(int i = 0; i < multiNumPipe.size(); i++) {
-                    if(multiNumPipe[i]->countdown == 0) {
+                for(int i = 0; i < (*multiNumPipe).size(); i++) {
+                    if((*multiNumPipe)[i]->countdown == 0) {
                         close(0);
-                        dup(multiNumPipe[i]->pipe[0]);
-                        close(multiNumPipe[i]->pipe[0]);
+                        dup((*multiNumPipe)[i]->pipe[0]);
+                        close((*multiNumPipe)[i]->pipe[0]);
                         break;
                     }
                 }
@@ -509,8 +515,7 @@ void npshell(int srcIndex) {
         }
         multiCommand.clear();
     }
-    usleep(10000);
-    write(usersInfo[srcIndex].fd, "% ", 3);
+    write(usersInfo[srcIndex].fd, "% ", 2);
 }
 
 
@@ -600,7 +605,7 @@ int main(int argc, char *argv[]) {
                     break;
                 }
             }
-            write(ssock, "% ", 3);
+            write(ssock, "% ", 2);
         }
 
         for(int index = 0; index < 30; index++)
