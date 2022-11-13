@@ -22,8 +22,6 @@ class UserPipeSuit {
         int pipe[2]; // 0: input, 1: output
         int senderId;
         int recverId;
-        bool isSendNull = false;
-        bool isRecvNull = false;
     private:
 };
 
@@ -46,6 +44,8 @@ class CommandSuit {
         string directFile;
         int senderId = -1;
         int recverId = -1;
+        bool isSendNull = false;
+        bool isRecvNull = false;
     private:
 };
 
@@ -148,7 +148,7 @@ void npshell(int srcIndex) {
         else if (tempWord[0] == '>' || tempWord[0] == '<') {
             bool isError = false;
             string userID = tempWord.substr(1);
-            if(stoi(userID) > 30 && !usersInfo[stoi(userID) - 1].isExist) {
+            if(stoi(userID) > 30 || !usersInfo[stoi(userID) - 1].isExist) {
                 string temp = "*** Error: user #" + userID + " does not exist yet. ***\n";
                 write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
                 isError = true;
@@ -171,7 +171,7 @@ void npshell(int srcIndex) {
                 tempPipe->senderId = srcIndex + 1;
                 tempPipe->recverId = stoi(userID);
                 if(isError)
-                    tempPipe->isSendNull = true;
+                    tempCommand->isSendNull = true;
                 userPipe.push_back(tempPipe);
                 pipe(userPipe[userPipe.size()-1]->pipe);
                 if(!isError) {
@@ -195,7 +195,7 @@ void npshell(int srcIndex) {
                     tempPipe->senderId = stoi(userID);
                     tempPipe->recverId = srcIndex + 1;
                     if(isError)
-                        tempPipe->isRecvNull = true;
+                        tempCommand->isRecvNull = true;
                     pipe(tempPipe->pipe);
                     userPipe.push_back(tempPipe);
                 }
@@ -472,7 +472,7 @@ void npshell(int srcIndex) {
                             break;
                     }
                     int devNull = open("/dev/null", O_RDWR);
-                    if(userPipe[i]->isSendNull) {
+                    if((*it)->isSendNull) {
                         dup2(devNull, 1);
                         close(devNull);
                     }
@@ -488,7 +488,7 @@ void npshell(int srcIndex) {
                             break;
                     }
                     int devNull = open("/dev/null", O_RDWR);
-                    if(userPipe[i]->isRecvNull) {
+                    if((*it)->isRecvNull) {
                         dup2(devNull, 0);
                         close(devNull);
                     }
