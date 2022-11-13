@@ -159,7 +159,7 @@ void npshell(int srcIndex) {
                     if(userPipe[i]->recverId == stoi(userID) && userPipe[i]->senderId == srcIndex + 1)
                         isExist = true;
                 }
-                if(isExist) {
+                if(!isError && isExist) {
                     string temp = "*** Error: the pipe #" + to_string(srcIndex + 1) + "->#" + userID + " already exists. ***\n";
                     write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
                     isError = true;
@@ -187,7 +187,7 @@ void npshell(int srcIndex) {
                     if(userPipe[i]->recverId == srcIndex + 1 && userPipe[i]->senderId == stoi(userID))
                         isExist = true;
                 }
-                if(!isExist) {
+                if(!isError && !isExist) {
                     string temp = "*** Error: the pipe #" + userID + "->#" + to_string(srcIndex + 1) + " does not exist yet. ***\n";
                     write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
                     isError = true;
