@@ -38,12 +38,13 @@ class WhoInfo {
 class CommandSuit {
     public:
         vector<string> words;
-        char pipeType; //#: >?, %: <?
+        char pipeType; 
+        char userPipeType; //#: >?, %: <?
         int pid;
         bool isNumPipe;
         string directFile;
-        int senderId = -1;
-        int recverId = -1;
+        UserPipeSuit* recvUserPipe = nullptr;
+        UserPipeSuit* sendUserPipe = nullptr;
         bool isSendNull = false;
         bool isRecvNull = false;
     private:
@@ -134,14 +135,13 @@ void npshell(int srcIndex) {
     CommandSuit *tempCommand = nullptr;
     bool isLast = false; // check if '>' is the last command
     bool doubleUserPipe = false;
-    bool isUserPipe = false;
     while (ss >> tempWord) {
+        reHandleWord:
         isLast = false;
         if (tempCommand == nullptr)
             tempCommand = new CommandSuit;
         
         if (tempWord == ">") {
-            isUserPipe = false;
             tempCommand->pipeType = '>';
             ss >> tempWord;
             tempCommand->directFile = tempWord;
@@ -149,80 +149,7 @@ void npshell(int srcIndex) {
             tempCommand = nullptr;
             isLast = true;
         }
-        else if (tempWord[0] == '>' || tempWord[0] == '<') {
-            // string tempWord2;
-            // bool needBreak = false;
-            // if(!(ss >> tempWord2))
-            //     needBreak = true;
-            bool isError = false;
-            string userID = tempWord.substr(1);
-            if(stoi(userID) > 30 || !usersInfo[stoi(userID) - 1].isExist) {
-                string temp = "*** Error: user #" + userID + " does not exist yet. ***\n";
-                write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
-                isError = true;
-            }
-            if(tempWord[0] == '>') {
-                bool isExist = false;
-                for(int i = 0; i < userPipe.size(); i++) {
-                    if(userPipe[i]->recverId == stoi(userID) && userPipe[i]->senderId == srcIndex + 1)
-                        isExist = true;
-                }
-                if(!isError && isExist) {
-                    string temp = "*** Error: the pipe #" + to_string(srcIndex + 1) + "->#" + userID + " already exists. ***\n";
-                    write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
-                    isError = true;
-                }
-                tempCommand->pipeType = '#';
-                tempCommand->senderId = srcIndex + 1;
-                tempCommand->recverId = stoi(userID);
-                if(isError)
-                    tempCommand->isSendNull = true;
-                else {
-                    UserPipeSuit* tempPipe = new UserPipeSuit;
-                    tempPipe->senderId = srcIndex + 1;
-                    tempPipe->recverId = stoi(userID);
-                    pipe(tempPipe->pipe);
-                    userPipe.push_back(tempPipe);
-                    string temp = "*** " + usersInfo[srcIndex].nickname + " (#" + to_string(srcIndex + 1) + ") just piped '" + commandline 
-                        + "' to " + usersInfo[stoi(userID) - 1].nickname + " (#" + userID + ") ***\n";
-                    broadcast(temp);
-                }
-                isLast = true;
-            }
-            else {
-                bool isExist = false;
-                for(int i = 0; i < userPipe.size(); i++) {
-                    if(userPipe[i]->recverId == srcIndex + 1 && userPipe[i]->senderId == stoi(userID))
-                        isExist = true;
-                }
-                if(!isError && !isExist) {
-                    string temp = "*** Error: the pipe #" + userID + "->#" + to_string(srcIndex + 1) + " does not exist yet. ***\n";
-                    write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
-                    isError = true;
-                }
-                tempCommand->pipeType = '$';
-                tempCommand->senderId = stoi(userID);
-                tempCommand->recverId = srcIndex + 1;
-                if(isError)
-                    tempCommand->isRecvNull = true;
-                else {
-                    string temp = "*** " + usersInfo[srcIndex].nickname + " (#" + to_string(srcIndex + 1) + ") just received from " 
-                        + usersInfo[stoi(userID) - 1].nickname + " (#" + userID + ") by '" + commandline + "' ***\n";
-                    broadcast(temp);
-                }
-                isLast = true;
-            }
-            if(isUserPipe) {
-                tempCommand->pipeType = '@';
-            }
-            multiCommand.push_back(tempCommand);
-            tempCommand = nullptr;
-            isUserPipe = true;
-            // if(needBreak)
-            //     break;
-        }
         else if (tempWord[0] == '|' || tempWord[0] == '!') {
-            isUserPipe = false;
             tempCommand->pipeType = tempWord[0];
             if (tempWord.length() != 1) {
                 NumPipeSuit* tempPipe = new NumPipeSuit;    
@@ -238,10 +165,101 @@ void npshell(int srcIndex) {
             multiCommand.push_back(tempCommand);
             tempCommand = nullptr;
         }
-        else {
-            isUserPipe = false;
-            tempCommand->words.push_back(tempWord);
+        else if (tempWord.length() > 1 && (tempWord[0] == '>' || tempWord[0] == '<')) {
+            string tempWordMix[2] = {tempWord, ""};
+            bool needBreak = false;
+            bool needGoto = false;
+            if(!(ss >> tempWord))
+                needBreak = true;
+            if(tempWord.length() > 1 && tempWordMix[0] != tempWord && (tempWord[0] == '>' || tempWord[0] == '<')) {
+                tempCommand->userPipeType = '@';
+                tempWordMix[1] = tempWord;
+            }
+            else if(tempWord.length() >= 1 && tempWordMix[0] != tempWord)
+                needGoto = true;
+
+            if(tempWordMix[0][0] == '>' && tempWordMix[1].length() > 1 && tempWordMix[1][0] == '<') {
+                string temp = tempWordMix[0];
+                tempWordMix[0] = tempWordMix[1];
+                tempWordMix[1] = temp;
+            }
+
+            for(int i = 0; i < 2; i++) {
+                if(tempWordMix[i][0] != '<' && tempWordMix[i][0] != '>')
+                    break;
+                
+                bool isError = false;
+                string userID = tempWordMix[i].substr(1);
+                if(stoi(userID) > 30 || !usersInfo[stoi(userID) - 1].isExist) {
+                    string temp = "*** Error: user #" + userID + " does not exist yet. ***\n";
+                    write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
+                    isError = true;
+                }
+
+                if(tempWordMix[i][0] == '<')  {
+                    bool isExist = false;
+                    for(int i = 0; i < userPipe.size(); i++) {
+                        if(userPipe[i]->recverId == srcIndex + 1 && userPipe[i]->senderId == stoi(userID)) {
+                            isExist = true;
+                            tempCommand->recvUserPipe = userPipe[i];
+                            break;
+                        }
+                    }
+                    if(!isError && !isExist) {
+                        string temp = "*** Error: the pipe #" + userID + "->#" + to_string(srcIndex + 1) + " does not exist yet. ***\n";
+                        write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
+                        isError = true;
+                    }
+                    if(tempCommand->userPipeType != '@')
+                        tempCommand->userPipeType = '$';
+                    if(isError)
+                        tempCommand->isRecvNull = true;
+                    else {
+                        string temp = "*** " + usersInfo[srcIndex].nickname + " (#" + to_string(srcIndex + 1) + ") just received from " 
+                            + usersInfo[stoi(userID) - 1].nickname + " (#" + userID + ") by '" + commandline + "' ***\n";
+                        broadcast(temp);
+                    }
+                }
+                else {
+                    bool isExist = false;
+                    for(int i = 0; i < userPipe.size(); i++) {
+                        if(userPipe[i]->recverId == stoi(userID) && userPipe[i]->senderId == srcIndex + 1)
+                            isExist = true;
+                    }
+                    if(!isError && isExist) {
+                        string temp = "*** Error: the pipe #" + to_string(srcIndex + 1) + "->#" + userID + " already exists. ***\n";
+                        write(usersInfo[srcIndex].fd, temp.c_str(), temp.length());
+                        isError = true;
+                    }
+                    if(tempCommand->userPipeType != '@')
+                        tempCommand->userPipeType = '#';
+                    if(isError)
+                        tempCommand->isSendNull = true;
+                    else {
+                        UserPipeSuit* tempPipe = new UserPipeSuit;
+                        tempPipe->senderId = srcIndex + 1;
+                        tempPipe->recverId = stoi(userID);
+                        pipe(tempPipe->pipe);
+                        userPipe.push_back(tempPipe);
+                        tempCommand->sendUserPipe = tempPipe;
+                        string temp = "*** " + usersInfo[srcIndex].nickname + " (#" + to_string(srcIndex + 1) + ") just piped '" + commandline 
+                            + "' to " + usersInfo[stoi(userID) - 1].nickname + " (#" + userID + ") ***\n";
+                        broadcast(temp);
+                    }
+                }
+            }
+            if(needGoto) {
+                isLast = false;
+                goto reHandleWord;
+            }
+            multiCommand.push_back(tempCommand);
+            tempCommand = nullptr;
+            isLast = true;
+            if(needBreak)
+                break;
         }
+        else
+            tempCommand->words.push_back(tempWord);
     }
     if (!isLast && tempWord[0] != '|' && tempWord[0] != '!')
         multiCommand.push_back(tempCommand);
@@ -397,25 +415,22 @@ void npshell(int srcIndex) {
                 }
 
                 // user pipe
-                if((*it)->pipeType == '#' || (*it)->pipeType == '@') {
+                if((*it)->userPipeType == '#' || (*it)->userPipeType == '@') {
                     if(!(*it)->isSendNull) {
-                        int i = 0;
-                        for(; i < userPipe.size(); i++) {
-                            if(userPipe[i]->senderId == (*it)->senderId && userPipe[i]->recverId == (*it)->recverId)
-                                break;
+                        for(int i = 0; i < userPipe.size(); i++) {
+                            if(userPipe[i] == (*it)->sendUserPipe)
+                                close(userPipe[i]->pipe[1]);
                         }
-                        close(userPipe[i]->pipe[1]);
                     }
                 }
-                if((*it)->pipeType == '$' || (*it)->pipeType == '@') {
+                if((*it)->userPipeType == '$' || (*it)->userPipeType == '@') {
                     if(!(*it)->isRecvNull) {
-                        int i = 0;
-                        for(; i < userPipe.size(); i++) {
-                            if(userPipe[i]->senderId == (*it)->senderId && userPipe[i]->recverId == (*it)->recverId)
-                                break;
+                        for(int i = 0; i < userPipe.size(); i++) {
+                            if(userPipe[i] == (*it)->recvUserPipe) {
+                                close(userPipe[i]->pipe[0]);
+                                userPipe.erase(userPipe.begin() + i);
+                            }
                         }
-                        close(userPipe[i]->pipe[0]);
-                        userPipe.erase(userPipe.begin() + i);
                     }
                 }
 
@@ -473,38 +488,39 @@ void npshell(int srcIndex) {
                 }
 
                 // user pipe
-                if((*it)->pipeType == '#' || (*it)->pipeType == '@') {
-                    if((*it)->isSendNull) {
-                        int devNull = open("/dev/null", O_RDWR);
-                        dup2(devNull, 1);
-                        close(devNull);
-                    }
-                    else {
-                        int i = 0;
-                        for(; i < userPipe.size(); i++) {
-                            if(userPipe[i]->senderId == (*it)->senderId && userPipe[i]->recverId == (*it)->recverId)
-                                break;
-                        }
-                        dup2(userPipe[i]->pipe[1], 1);
-                        close(userPipe[i]->pipe[1]);
-                    }
-                }
-                if((*it)->pipeType == '$' || (*it)->pipeType == '@') {
+                if((*it)->userPipeType == '$' || (*it)->userPipeType == '@') {
                     if((*it)->isRecvNull) {
                         int devNull = open("/dev/null", O_RDWR);
                         dup2(devNull, 0);
                         close(devNull);
                     }
                     else {
-                        int i = 0;
-                        for(; i < userPipe.size(); i++) {
-                            if(userPipe[i]->senderId == (*it)->senderId && userPipe[i]->recverId == (*it)->recverId)
+                        for(int i = 0; i < userPipe.size(); i++) {
+                            if(userPipe[i] == (*it)->recvUserPipe) {
+                                dup2(userPipe[i]->pipe[0], 0);
+                                close(userPipe[i]->pipe[0]);
                                 break;
+                            }
                         }
-                        dup2(userPipe[i]->pipe[0], 0);
-                        close(userPipe[i]->pipe[0]);
                     }
                 }
+                if((*it)->userPipeType == '#' || (*it)->userPipeType == '@') {
+                    if((*it)->isSendNull) {
+                        int devNull = open("/dev/null", O_RDWR);
+                        dup2(devNull, 1);
+                        close(devNull);
+                    }
+                    else {
+                        for(int i = 0; i < userPipe.size(); i++) {
+                            if(userPipe[i] == (*it)->sendUserPipe) {
+                                dup2(userPipe[i]->pipe[1], 1);
+                                close(userPipe[i]->pipe[1]);
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 // execute command
                 char **argv = new char*[128]();
                 for(int i = 0; i < (*it)->words.size()+1; i++) {
@@ -514,7 +530,7 @@ void npshell(int srcIndex) {
                     else
                         strcpy(*(argv+i), (*it)->words[i].c_str());
                 }
-                
+
                 if(execvp((*it)->words[0].c_str(), argv) == -1) {
                     cerr << "Unknown command: [" << (*it)->words[0] << "]." << endl;
                     exit(1);
