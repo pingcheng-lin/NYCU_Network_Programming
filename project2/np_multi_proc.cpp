@@ -43,8 +43,8 @@ class CommandSuit {
         int pid;
         bool isNumPipe;
         string directFile;
-        int senderId;
-        int recverId;
+        int senderId = -1;
+        int recverId = -1;
         bool isSendNull = false;
         bool isRecvNull = false;
     private:
@@ -230,7 +230,7 @@ void npshell(int srcIndex) {
                             tempCommand->userPipeType = '$';
                         
                         
-                        tempCommand->isSendNull = true;
+                        // tempCommand->isSendNull = true;
                         if(isError) {
                             tempCommand->isRecvNull = true;
                         }
@@ -260,7 +260,7 @@ void npshell(int srcIndex) {
                         if(tempCommand->userPipeType != '@')
                             tempCommand->userPipeType = '#';
 
-                        tempCommand->isRecvNull = true;
+                        // tempCommand->isRecvNull = true;
                         if(isError)
                             tempCommand->isSendNull = true;
                         else {
@@ -475,6 +475,13 @@ void npshell(int srcIndex) {
                     int status;
                     if (it + 1 == multiCommand.end() && !(*it)->isNumPipe)
                         waitpid((*it)->pid, &status, 0);
+                    else if((*it)->userPipeType == '$' ||(*it)->userPipeType == '@') {
+                        waitpid((*it)->pid, &status, 0);
+                        string fileName = "user_pipe/" + to_string((*it)->senderId) + "-" + to_string((*it)->recverId);
+                        remove(fileName.c_str());
+                    } 
+                    else if((*it)->userPipeType == '#' || (*it)->userPipeType == '@')
+                        waitpid((*it)->pid, &status, 0);
                     else
                         waitpid(-1, &status,WNOHANG);
                     
@@ -567,12 +574,6 @@ void npshell(int srcIndex) {
             }
         }
         usleep(1000);
-        for(int i = 0; i < multiCommand.size(); i++) {
-            if(!multiCommand[i]->isRecvNull && (multiCommand[i]->userPipeType == '$' || multiCommand[i]->userPipeType == '@')) {
-                string fileName = "user_pipe/" + to_string(multiCommand[i]->senderId) + "-" + to_string(multiCommand[i]->recverId);
-                remove(fileName.c_str());
-            }
-        }
         multiCommand.clear();
         cout << "% ";
         fflush(stdout);
@@ -580,6 +581,7 @@ void npshell(int srcIndex) {
 }
 
 int passiveTCP(int port) {
+    signal(SIGCHLD, Sigchld_handler);
     int sockfd, newsockfd, cli_len;
     struct sockaddr_in srv_addr;
 
