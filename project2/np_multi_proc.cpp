@@ -20,16 +20,6 @@ using namespace std;
 #define PERMS 0666
 #define BUFFSIZE 8192
 
-class UserPipeSuit {
-    public:
-        int pipe[2]; // 0: input, 1: output
-        int senderId;
-        int recverId;
-        bool isUsed = false;
-        bool isDone = false;
-    private:
-};
-
 class WhoInfo {
     public:
         bool isExist = false;
@@ -53,8 +43,8 @@ class CommandSuit {
         int pid;
         bool isNumPipe;
         string directFile;
-        UserPipeSuit* recvUserPipe = nullptr;
-        UserPipeSuit* sendUserPipe = nullptr;
+        int senderId;
+        int recverId;
         bool isSendNull = false;
         bool isRecvNull = false;
     private:
@@ -111,16 +101,12 @@ void initInfo(int index) {
 }
 
 void fifoPipe(int *pipe, int senderId, int recverId, string type) {
-    string fileName1 = "user_pipe/" + to_string(senderId) + "-" + to_string(recverId);
+    string fileName = "user_pipe/" + to_string(senderId) + "-" + to_string(recverId);
     if(type == "read") {
-        while(access(fileName1.c_str(), F_OK) == 0);
-        string fileName2 = "user_pipe/!" + to_string(senderId) + "-" + to_string(recverId);
-        int read = open(fileName2.c_str(), O_RDONLY);
-        pipe[0] = read;
+        pipe[0] = open(fileName.c_str(),  O_RDONLY | O_NONBLOCK);
     }
     else {
-        int write = open(fileName1.c_str(), O_CREAT|O_WRONLY|O_TRUNC, S_IRUSR|S_IWUSR);
-        pipe[1] = write;
+        pipe[1] = open(fileName.c_str(), O_CREAT|O_WRONLY|O_TRUNC);
     }
 }
 
@@ -130,7 +116,6 @@ void npshell(int srcIndex) {
     dup2(usersInfo[srcIndex].fd, 0);
     dup2(usersInfo[srcIndex].fd, 1);
     dup2(usersInfo[srcIndex].fd, 2);
-    vector<UserPipeSuit*> userPipe;
     vector<CommandSuit*> multiCommand;
     vector<PipeSuit*> multiPipe;
     vector<NumPipeSuit*>* multiNumPipe = new vector<NumPipeSuit*>;
@@ -149,6 +134,7 @@ void npshell(int srcIndex) {
     fflush(stdout);
     string commandline;
     while (getline(cin, commandline)) {
+        int myPipe[2];
         // remove whitespace and parse command
         if(commandline[commandline.length() - 1] == '\n')
             commandline.erase(commandline.length()-1);
@@ -227,20 +213,10 @@ void npshell(int srcIndex) {
 
                     if(tempWordMix[i][0] == '<')  {
                         bool isExist = false;
-                        string fileName1 = "user_pipe/" + userID + "-" + to_string(srcIndex + 1);
-                        string fileName2 = "user_pipe/!" + userID + "-" + to_string(srcIndex + 1);
-                        if(access(fileName1.c_str(), F_OK) == 0) {
-                            while(access(fileName1.c_str(), F_OK) == 0);
-                            while(access(fileName2.c_str(), F_OK) != 0);
-                        }
-                        if(access(fileName2.c_str(), F_OK) == 0) {
+                        string fileName = "user_pipe/" + userID + "-" + to_string(srcIndex + 1);
+                        if(access(fileName.c_str(), F_OK) == 0) {
                             isExist = true;
-                            UserPipeSuit* temp;
-                            temp->senderId = stoi(userID);
-                            temp->recverId = srcIndex + 1;
-                            fifoPipe(temp->pipe, temp->senderId, temp->recverId, "read");
-                            userPipe.push_back(temp);
-                            tempCommand->recvUserPipe = temp;
+                            fifoPipe(myPipe, stoi(userID), srcIndex + 1, "read");
                         }
 
                         if(!isError && !isExist) {
@@ -253,10 +229,14 @@ void npshell(int srcIndex) {
                         if(tempCommand->userPipeType != '@')
                             tempCommand->userPipeType = '$';
                         
+                        
+                        tempCommand->isSendNull = true;
                         if(isError) {
                             tempCommand->isRecvNull = true;
                         }
                         else {
+                            tempCommand->senderId = stoi(userID);
+                            tempCommand->recverId = srcIndex + 1;
                             string senderName(usersInfo[stoi(userID) - 1].nickname);
                             string receiveName(usersInfo[srcIndex].nickname);
                             string temp = "*** " + receiveName + " (#" + to_string(srcIndex + 1) + ") just received from " 
@@ -267,9 +247,8 @@ void npshell(int srcIndex) {
                     }
                     else {
                         bool isExist = false;
-                        string fileName1 = "user_pipe/" + to_string(srcIndex + 1) + "-" + userID;
-                        string fileName2 = "user_pipe/!" + to_string(srcIndex + 1) + "-" + userID;
-                        if(access(fileName1.c_str(), F_OK) == 0 || access(fileName2.c_str(), F_OK) == 0 )
+                        string fileName = "user_pipe/" + to_string(srcIndex + 1) + "-" + userID;
+                        if(access(fileName.c_str(), F_OK) == 0)
                             isExist = true;
 
                         if(!isError && isExist) {
@@ -280,15 +259,14 @@ void npshell(int srcIndex) {
                         }
                         if(tempCommand->userPipeType != '@')
                             tempCommand->userPipeType = '#';
+
+                        tempCommand->isRecvNull = true;
                         if(isError)
                             tempCommand->isSendNull = true;
                         else {
-                            UserPipeSuit* tempPipe = new UserPipeSuit;
-                            tempPipe->senderId = srcIndex + 1;
-                            tempPipe->recverId = stoi(userID);
-                            fifoPipe(tempPipe->pipe, tempPipe->senderId, tempPipe->recverId, "write");
-                            userPipe.push_back(tempPipe);
-                            tempCommand->sendUserPipe = tempPipe;
+                            tempCommand->senderId = srcIndex + 1;
+                            tempCommand->recverId = stoi(userID);
+                            fifoPipe(myPipe, srcIndex + 1, stoi(userID), "write");
                             string senderName(usersInfo[srcIndex].nickname);
                             string receiveName(usersInfo[stoi(userID) - 1].nickname);
                             string temp = "*** " + senderName + " (#" + to_string(srcIndex + 1) + ") just piped '" + commandline 
@@ -301,7 +279,6 @@ void npshell(int srcIndex) {
                     isLast = false;
                     goto reHandleWord;
                 }
-
                 multiCommand.push_back(tempCommand);
                 tempCommand = nullptr;
                 isLast = true;
@@ -323,6 +300,17 @@ void npshell(int srcIndex) {
             close(usersInfo[srcIndex].fd);
             dup2(0, 1);
             dup2(0, 2);
+
+            for(int i = 0; i < 30; i++) {
+                string fileName1 = "user_pipe/" + to_string(srcIndex) + "-" + to_string(i+1);
+                if(access(fileName1.c_str(), F_OK) == 0) {
+                    remove(fileName1.c_str());
+                }
+                string fileName2 = "user_pipe/" + to_string(i+1) + "-" + to_string(srcIndex);
+                if(access(fileName2.c_str(), F_OK) == 0) {
+                    remove(fileName2.c_str());
+                }
+            }
             initInfo(srcIndex);
             shmdt(usersInfo);
             shmdt(broadcastPtr);
@@ -330,6 +318,7 @@ void npshell(int srcIndex) {
             shmctl(shmidBroadcast, IPC_RMID, (shmid_ds*)0);
             int status;
             while(waitpid(-1, &status, WNOHANG) > 0);
+            exit(0);
         }
         else if (multiCommand.size() && multiCommand[0]->words[0] == "setenv") {
             setenv(multiCommand[0]->words[1].c_str(), multiCommand[0]->words[2].c_str(), 1);
@@ -473,22 +462,13 @@ void npshell(int srcIndex) {
                     // user pipe
                     if((*it)->userPipeType == '#' || (*it)->userPipeType == '@') {
                         if(!(*it)->isSendNull) {
-                            for(int i = 0; i < userPipe.size(); i++) {
-                                if(userPipe[i] == (*it)->sendUserPipe)
-                                    close(userPipe[i]->pipe[1]);
-                                    userPipe[i]->isDone = true;
-                            }
+                            close(myPipe[1]);
                         }
                     }
 
                     if((*it)->userPipeType == '$' || (*it)->userPipeType == '@') {
                         if(!(*it)->isRecvNull) {
-                            for(int i = 0; i < userPipe.size(); i++) {
-                                if(userPipe[i] == (*it)->recvUserPipe) {
-                                    close(userPipe[i]->pipe[0]);
-                                    userPipe[i]->isUsed = true;
-                                }
-                            }
+                            close(myPipe[0]);
                         }
                     }
 
@@ -553,13 +533,8 @@ void npshell(int srcIndex) {
                             close(devNull);
                         }
                         else {
-                            for(int i = 0; i < userPipe.size(); i++) {
-                                if(userPipe[i] == (*it)->recvUserPipe) {
-                                    dup2(userPipe[i]->pipe[0], 0);
-                                    close(userPipe[i]->pipe[0]);
-                                    break;
-                                }
-                            }
+                            dup2(myPipe[0], 0);
+                            close(myPipe[0]);
                         }
                     }
                     if((*it)->userPipeType == '#' || (*it)->userPipeType == '@') {
@@ -569,13 +544,8 @@ void npshell(int srcIndex) {
                             close(devNull);
                         }
                         else {
-                            for(int i = 0; i < userPipe.size(); i++) {
-                                if(userPipe[i] == (*it)->sendUserPipe) {
-                                    dup2(userPipe[i]->pipe[1], 1);
-                                    close(userPipe[i]->pipe[1]);
-                                    break;
-                                }
-                            }
+                            dup2(myPipe[1], 1);
+                            close(myPipe[1]);
                         }
                     }
 
@@ -596,20 +566,14 @@ void npshell(int srcIndex) {
                 }
             }
         }
-        for(int i = 0; i < userPipe.size(); i++) {
-            if(userPipe[i]->isDone) {
-                string fileName1 = "user_pipe/" + to_string(userPipe[i]->senderId) + "-" + to_string(userPipe[i]->recverId);
-                string fileName2 = "user_pipe/!" + to_string(userPipe[i]->senderId) + "-" + to_string(userPipe[i]->recverId);
-                rename(fileName1.c_str(), fileName2.c_str());
-            }
-            if(userPipe[i]->isUsed || userPipe[i]->senderId > 30 || userPipe[i]->recverId > 30) {
-                string fileName = "user_pipe/!" + to_string(userPipe[i]->senderId) + "-" + to_string(userPipe[i]->recverId);
+        usleep(1000);
+        for(int i = 0; i < multiCommand.size(); i++) {
+            if(!multiCommand[i]->isRecvNull && (multiCommand[i]->userPipeType == '$' || multiCommand[i]->userPipeType == '@')) {
+                string fileName = "user_pipe/" + to_string(multiCommand[i]->senderId) + "-" + to_string(multiCommand[i]->recverId);
                 remove(fileName.c_str());
-                userPipe.erase(userPipe.begin() + i);
             }
         }
         multiCommand.clear();
-        usleep(1000);
         cout << "% ";
         fflush(stdout);
     }
