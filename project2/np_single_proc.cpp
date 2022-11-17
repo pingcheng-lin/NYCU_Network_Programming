@@ -1,6 +1,5 @@
 #include <iostream>
 #include <vector>
-#include <iostream>
 #include <string>
 #include <cstring>
 #include <sstream>
@@ -11,11 +10,9 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <map> 
+#include <map>
 using namespace std;
 
-#define QLEN 30
-#define BUFSIZE 4096
 
 class UserPipeSuit {
     public:
@@ -65,9 +62,8 @@ class NumPipeSuit {
     private:
 };
 
-int msock;
 fd_set rfds, afds; // read file descriptor set, active file descriptor set
-WhoInfo usersInfo[QLEN];
+WhoInfo usersInfo[30];
 
 void Sigchld_handler(int sig) {
     int status;
@@ -268,15 +264,13 @@ void npshell(int srcIndex) {
     if (multiCommand.size() && multiCommand[0]->words[0] == "exit") {
         string temp = "*** User '" + usersInfo[srcIndex].nickname + "' left. ***\n";
         close(usersInfo[srcIndex].fd);
-        close(1);
-        close(2);
         dup2(0, 1);
         dup2(0, 2);
         broadcast(temp);
         FD_CLR(usersInfo[srcIndex].fd, &afds);
         initInfo(srcIndex);
         int status;
-        while(waitpid(-1, &status, WNOHANG) > 0){}
+        while(waitpid(-1, &status, WNOHANG) > 0);
     }
     else if (multiCommand.size() && multiCommand[0]->words[0] == "setenv") {
         usersInfo[srcIndex].env[multiCommand[0]->words[1]] = multiCommand[0]->words[2];
@@ -339,7 +333,7 @@ void npshell(int srcIndex) {
     }
     else {
         for (vector<CommandSuit*>:: iterator it = multiCommand.begin(); it != multiCommand.end(); it++) {
-            int shellChildpid;
+            int childpid;
             int currentNumPipeSuite;
             int targetPipe = 0;
             
@@ -376,14 +370,14 @@ void npshell(int srcIndex) {
                 } 
             }
 
-            shellChildpid = fork();
-            while (shellChildpid < 0) {
+            childpid = fork();
+            while (childpid < 0) {
                 usleep(1000);
-                shellChildpid = fork();
+                childpid = fork();
             }
-            if (shellChildpid > 0) {
+            if (childpid > 0) {
                 // parent
-                (*it)->pid = shellChildpid;
+                (*it)->pid = childpid;
 
                 //remove ordinary pipe
                 if(multiPipe.size() > 0 && multiPipe[0]->isUsed) {
@@ -542,10 +536,9 @@ void npshell(int srcIndex) {
     write(usersInfo[srcIndex].fd, "% ", 2);
 }
 
-
 int passiveTCP(int port) {
-    int sockfd, newsockfd, cli_len, childpid;
-    struct sockaddr_in srv_addr, cli_addr;
+    int sockfd, newsockfd, cli_len;
+    struct sockaddr_in srv_addr;
 
     // Open a TCP socket
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -570,7 +563,7 @@ int passiveTCP(int port) {
         exit(1);
     }
 
-    if(listen(sockfd, QLEN) < 0) {
+    if(listen(sockfd, 30) < 0) {
         perror("listen");
         exit(1);
     }
@@ -579,10 +572,7 @@ int passiveTCP(int port) {
 }
 
 int main(int argc, char *argv[]) {
-    struct sockaddr_in fsin;
-    int alen;
-    int fd;
-    msock = passiveTCP(atoi(argv[1]));
+    int msock = passiveTCP(atoi(argv[1]));
 
     FD_ZERO(&afds);
     FD_SET(msock, &afds);
@@ -597,18 +587,17 @@ int main(int argc, char *argv[]) {
             if(usersInfo[index].fd > max)
                 max = usersInfo[index].fd;
         
-        int temp = -1, err = EINTR;
-        while ((temp < 0) && (err == EINTR)) {
+        int temp = -1, status = EINTR;
+        while ((temp < 0) && (status == EINTR)) {
             temp = select(max + 1, &rfds, (fd_set *)0, (fd_set *)0, (struct timeval *)0);
-            if(temp < 0) {
-                err = errno;
-            }
+            if(temp < 0)
+                status = errno;
         };
 
         if(FD_ISSET(msock, &rfds)) {
-            int ssock;
-            alen = sizeof(fsin);
-            ssock = accept(msock, (struct sockaddr*) &fsin, (socklen_t*) &alen);
+            struct sockaddr_in fsin;
+            int alen = sizeof(fsin);
+            int ssock = accept(msock, (struct sockaddr*) &fsin, (socklen_t*) &alen);
             if(ssock < 0) {
                 perror("server: accept error");
                 exit(1);
@@ -618,7 +607,7 @@ int main(int argc, char *argv[]) {
             write(ssock, welcome.c_str(), welcome.length());
 
             int index;
-            for(index = 0; index < QLEN; index++) {
+            for(index = 0; index < 30; index++) {
                 if(!usersInfo[index].isExist) {
                     usersInfo[index].isExist = true;
                     usersInfo[index].fd = ssock;
@@ -638,8 +627,6 @@ int main(int argc, char *argv[]) {
         for(int index = 0; index < 30; index++)
             if(usersInfo[index].isExist) {
                 npshell(index);
-                close(1);
-                close(2);
                 dup2(0, 1);
                 dup2(0, 2);
             }
