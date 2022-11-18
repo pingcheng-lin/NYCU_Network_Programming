@@ -22,7 +22,7 @@ using namespace std;
 
 class WhoInfo {
     public:
-        bool isExist = false;
+        int isExist = 0;
         int fd;
         int pid;
         char nickname[BUFFSIZE];
@@ -38,8 +38,8 @@ class BroadcastWords {
 class CommandSuit {
     public:
         vector<string> words;
-        char pipeType; 
-        char userPipeType; //#: >?, %: <?
+        char pipeType = '?'; 
+        char userPipeType = ' '; //#: >?, %: <?
         int pid;
         bool isNumPipe;
         string directFile;
@@ -94,7 +94,7 @@ void SigBroadcast_handler(int sig) {
 }
 
 void initInfo(int index) {
-    usersInfo[index].isExist = false;
+    usersInfo[index].isExist = 0;
     usersInfo[index].pid = -1;
     strcpy(usersInfo[index].nickname, "(no name)");
     strcpy(usersInfo[index].address, "");
@@ -103,7 +103,7 @@ void initInfo(int index) {
 void fifoPipe(int *pipe, int senderId, int recverId, string type) {
     string fileName = "user_pipe/" + to_string(senderId) + "-" + to_string(recverId);
     if(type == "read") {
-        pipe[0] = open(fileName.c_str(),  O_RDONLY | O_NONBLOCK);
+        pipe[0] = open(fileName.c_str(),  O_RDONLY);
     }
     else {
         pipe[1] = open(fileName.c_str(), O_CREAT|O_WRONLY|O_TRUNC);
@@ -132,7 +132,7 @@ void npshell(int srcIndex) {
     fflush(stdout);
     string commandline;
     while (getline(cin, commandline)) {
-        int myPipe[2];
+        int myPipe[2] = {0, 0};
         // remove whitespace and parse command
         if(commandline[commandline.length() - 1] == '\n')
             commandline.erase(commandline.length()-1);
@@ -197,7 +197,7 @@ void npshell(int srcIndex) {
                     tempWordMix[1] = temp;
                 }
                 for(int i = 0; i < 2; i++) {
-                    if(tempWordMix[i][0] != '<' && tempWordMix[i][0] != '>')
+                    if(tempWordMix[i] == "")
                         break;
                     
                     bool isError = false;
@@ -283,7 +283,7 @@ void npshell(int srcIndex) {
             else
                 tempCommand->words.push_back(tempWord);
         }
-
+        
         if (!isLast && tempWord[0] != '|' && tempWord[0] != '!')
             multiCommand.push_back(tempCommand);
 
@@ -297,11 +297,11 @@ void npshell(int srcIndex) {
             dup2(0, 2);
 
             for(int i = 0; i < 30; i++) {
-                string fileName1 = "user_pipe/" + to_string(srcIndex) + "-" + to_string(i+1);
+                string fileName1 = "user_pipe/" + to_string(srcIndex + 1) + "-" + to_string(i + 1);
                 if(access(fileName1.c_str(), F_OK) == 0) {
                     remove(fileName1.c_str());
                 }
-                string fileName2 = "user_pipe/" + to_string(i+1) + "-" + to_string(srcIndex);
+                string fileName2 = "user_pipe/" + to_string(i + 1) + "-" + to_string(srcIndex + 1);
                 if(access(fileName2.c_str(), F_OK) == 0) {
                     remove(fileName2.c_str());
                 }
@@ -468,13 +468,14 @@ void npshell(int srcIndex) {
                     }
 
                     int status;
-                    if (it + 1 == multiCommand.end() && !(*it)->isNumPipe)
+                    if((*it)->userPipeType == '$' || (*it)->userPipeType == '@') {
                         waitpid((*it)->pid, &status, 0);
-                    else if((*it)->userPipeType == '$' ||(*it)->userPipeType == '@') {
-                        waitpid((*it)->pid, &status, 0);
-                        string fileName = "user_pipe/" + to_string((*it)->senderId) + "-" + to_string((*it)->recverId);
-                        remove(fileName.c_str());
+                        string fileName = "user_pipe/" + to_string((*it)->senderId) + "-" + to_string(srcIndex + 1);
+                        if(access(fileName.c_str(), F_OK) == 0)
+                            remove(fileName.c_str());
                     } 
+                    else if (it + 1 == multiCommand.end() && !(*it)->isNumPipe)
+                        waitpid((*it)->pid, &status, 0);
                     else if((*it)->userPipeType == '#' || (*it)->userPipeType == '@')
                         waitpid((*it)->pid, &status, 0);
                     else
@@ -482,7 +483,7 @@ void npshell(int srcIndex) {
                     
                 } else {
                     // child
-                    // command output to pipe: pipe modification
+                    usleep(500);
                     if((*it)->pipeType == '|' || (*it)->pipeType == '!' ) {
                         close(1);
                         if((*it)->pipeType == '!') {
@@ -503,7 +504,7 @@ void npshell(int srcIndex) {
                                 close(multiPipe[0]->pipe[1]);
                             }
                         }
-                    }  
+                    } 
                     // command input from pipe: pipe modification
                     if(multiPipe.size() > 0 && multiPipe[0]->isUsed) {
                         close(0);
@@ -663,7 +664,7 @@ int main(int argc, char *argv[]) {
             childpid = fork();
         }
         if(childpid > 0) {
-            usersInfo[index].isExist = true;
+            usersInfo[index].isExist = 1;
             usersInfo[index].fd = ssock;
             usersInfo[index].pid = childpid;
             string ip = inet_ntoa(fsin.sin_addr);
