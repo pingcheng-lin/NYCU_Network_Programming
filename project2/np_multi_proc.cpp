@@ -259,8 +259,6 @@ void npshell(int srcIndex) {
                         if(isError)
                             tempCommand->isSendNull = true;
                         else {
-                            tempCommand->senderId = srcIndex + 1;
-                            tempCommand->recverId = stoi(userID);
                             fifoPipe(myPipe, srcIndex + 1, stoi(userID), "write");
                             string senderName(usersInfo[srcIndex].nickname);
                             string receiveName(usersInfo[stoi(userID) - 1].nickname);
