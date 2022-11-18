@@ -481,7 +481,7 @@ void npshell(int srcIndex) {
                     
                 } else {
                     // child
-                    usleep(500);
+                    usleep(1000);
                     if((*it)->pipeType == '|' || (*it)->pipeType == '!' ) {
                         close(1);
                         if((*it)->pipeType == '!') {
