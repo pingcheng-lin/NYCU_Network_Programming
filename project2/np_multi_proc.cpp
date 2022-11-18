@@ -111,8 +111,6 @@ void fifoPipe(int *pipe, int senderId, int recverId, string type) {
 }
 
 void npshell(int srcIndex) {
-    signal(SIGCHLD, Sigchld_handler);
-    signal(SIGUSR1, SigBroadcast_handler);
     dup2(usersInfo[srcIndex].fd, 0);
     dup2(usersInfo[srcIndex].fd, 1);
     dup2(usersInfo[srcIndex].fd, 2);
@@ -229,8 +227,6 @@ void npshell(int srcIndex) {
                         if(tempCommand->userPipeType != '@')
                             tempCommand->userPipeType = '$';
                         
-                        
-                        // tempCommand->isSendNull = true;
                         if(isError) {
                             tempCommand->isRecvNull = true;
                         }
@@ -260,7 +256,6 @@ void npshell(int srcIndex) {
                         if(tempCommand->userPipeType != '@')
                             tempCommand->userPipeType = '#';
 
-                        // tempCommand->isRecvNull = true;
                         if(isError)
                             tempCommand->isSendNull = true;
                         else {
@@ -423,7 +418,7 @@ void npshell(int srcIndex) {
 
                 childpid = fork();
                 while (childpid < 0) {
-                    usleep(1000);
+                    usleep(100);
                     childpid = fork();
                 }
                 if (childpid > 0) {
@@ -573,7 +568,7 @@ void npshell(int srcIndex) {
                 }
             }
         }
-        usleep(1000);
+        usleep(100);
         multiCommand.clear();
         cout << "% ";
         fflush(stdout);
@@ -582,6 +577,7 @@ void npshell(int srcIndex) {
 
 int passiveTCP(int port) {
     signal(SIGCHLD, Sigchld_handler);
+    signal(SIGUSR1, SigBroadcast_handler);
     int sockfd, newsockfd, cli_len;
     struct sockaddr_in srv_addr;
 
@@ -663,7 +659,7 @@ int main(int argc, char *argv[]) {
 
         int childpid = fork();
         while (childpid < 0) {
-            usleep(1000);
+            usleep(100);
             childpid = fork();
         }
         if(childpid > 0) {
