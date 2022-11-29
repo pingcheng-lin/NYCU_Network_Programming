@@ -3,8 +3,13 @@
 #include <memory>
 #include <utility>
 #include <boost/asio.hpp>
+#include <string>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sstream>
 
 using boost::asio::ip::tcp;
+using namespace std;
 
 class session
 : public std::enable_shared_from_this<session>
@@ -29,7 +34,37 @@ private:
             {
             if (!ec)
             {
-                do_write(length);
+                handle_request();
+
+                int childpid = fork();
+                while(childpid < 0) {
+                    usleep(100);
+                    childpid = fork();
+                }
+                if(childpid > 0) {
+                    socket_.close();
+                } else {
+                    my_setenv();
+                    
+                    dup2(socket_.native_handle(), 0);
+                    dup2(socket_.native_handle(), 1);
+                    dup2(socket_.native_handle(), 2);
+                    socket_.close();
+
+                    cout << "HTTP/1.1 200 OK\r\n";
+                    fflush(stdout);
+
+                    string path;
+                    size_t pos = REQUEST_URI.find('?');
+                    if(pos == string::npos)
+                        path = "." + REQUEST_URI;
+                    else
+                        path = "." + REQUEST_URI.substr(0, pos);
+                    if(execlp(path.c_str(), path.c_str(), NULL) == -1) {
+                        perror("execlp");
+                        exit(-1);
+                    }
+                }
             }
             });
     }
@@ -46,6 +81,47 @@ private:
             }
             });
     }
+
+    void handle_request() {
+        string trash;
+        stringstream temp(data_);
+        
+        temp >> REQUEST_METHOD;
+        temp >> REQUEST_URI;
+        size_t pos = REQUEST_URI.find('?');
+        if(pos != string::npos)
+            QUERY_STRING = REQUEST_URI.substr(pos + 1);
+        temp >> SERVER_PROTOCOL;
+        temp >> trash;
+        temp >> HTTP_HOST;
+
+        SERVER_ADDR = socket_.local_endpoint().address().to_string();
+        SERVER_PORT = to_string(socket_.local_endpoint().port());
+        REMOTE_ADDR = socket_.remote_endpoint().address().to_string();
+        REMOTE_PORT = to_string(socket_.remote_endpoint().port());
+    }
+
+    void my_setenv() {
+        setenv("REQUEST_METHOD", REQUEST_METHOD.c_str(), 1);
+        setenv("REQUEST_URI", REQUEST_URI.c_str(), 1);
+        setenv("QUERY_STRING", QUERY_STRING.c_str(), 1);
+        setenv("SERVER_PROTOCOL", SERVER_PROTOCOL.c_str(), 1);
+        setenv("HTTP_HOST", HTTP_HOST.c_str(), 1);
+        setenv("SERVER_ADDR", SERVER_ADDR.c_str(), 1);
+        setenv("SERVER_PORT", SERVER_PORT.c_str(), 1);
+        setenv("REMOTE_ADDR", REMOTE_ADDR.c_str(), 1);
+        setenv("REMOTE_PORT", REMOTE_PORT.c_str(), 1);
+    }
+
+    string REQUEST_METHOD = "";
+    string REQUEST_URI = "";
+    string QUERY_STRING = "";
+    string SERVER_PROTOCOL = "";
+    string HTTP_HOST = "";
+    string SERVER_ADDR = "";
+    string SERVER_PORT = "";
+    string REMOTE_ADDR = "";
+    string REMOTE_PORT = "";
 
     tcp::socket socket_;
     enum { max_length = 1024 };
