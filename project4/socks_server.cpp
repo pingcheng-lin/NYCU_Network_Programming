@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sstream>
+#include <fstream>
 
 using boost::asio::ip::tcp;
 using namespace std;
@@ -18,8 +19,9 @@ class session
 {
 public:
     session(tcp::socket socket)
-        : socket_(std::move(socket))
+        : socket_(std::move(socket)), dst_socket_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), 0)), resolver(io_context)
     {
+        socksConf.open("socks.conf", fstream::in);
     }
 
     void start()
@@ -36,7 +38,48 @@ private:
             {
             if (!ec)
             {
+                S_IP = socket_.local_endpoint().address().to_string();
+                S_PORT = to_string(socket_.local_endpoint().port());
+                D_IP = (int)data_[2] * 256 + (int)data_[3];
+                if((int)data_[4] == 0 && (int)data_[5] == 0 && (int)data_[6] == 0 && (int)data_[7] != 0) {
+
+                } 
+                else {
+
+                }
                 
+                D_PORT;
+                if((int)data_[1] == 1)
+                    Command = "CONNECT";
+                else
+                    Command = "BIND";
+                Reply = "ACCEPT"; //firewall
+                do_resolve();
+            }
+            });
+    }
+
+    void do_resolve() {
+        auto self(shared_from_this());
+        tcp::resolver::query query(D_IP, D_PORT);
+        resolver.async_resolve(query,
+            [this, self](boost::system::error_code ec, tcp::resolver::iterator it) {
+            if(!ec) {
+                do_connect(it);
+            } else {
+                cout << "Error (do_resolve): " << ec.message() << "\n";
+            }
+            });
+    }
+
+    void do_connect(tcp::resolver::iterator it) {
+        auto self(shared_from_this());
+        socket_.async_connect(*it, 
+            [this, self](const boost::system::error_code ec) {
+            if(!ec) {
+                do_read();
+            } else {
+                cout << "Error (do_connect): " << ec.message() << "\n";
             }
             });
     }
@@ -54,15 +97,37 @@ private:
             });
     }
 
+    void showMsg() {
+        cout << "<S_IP>: " << S_IP << endl;
+        cout << "<S_PORT>: " << S_PORT << endl;
+        cout << "<D_IP>: " << D_IP << endl;
+        cout << "<D_PORT>: " << D_PORT << endl;
+        cout << "<Command>: " << Command << endl;
+        cout << "<Reply>: " << Reply << endl;
+        fflush(stdout);
+    }
+
     tcp::socket socket_;
+    tcp::socket dst_socket_;
+    tcp::acceptor acceptor_;
+    tcp::resolver resolver;
     enum { max_length = 1024 };
-    char data_[max_length];
+    unsigned char data_[max_length];
+    char clientData_[max_length];
+    char serverData_[max_length];
+    string S_IP;
+    string S_PORT;
+    string D_IP;
+    string D_PORT;
+    string Command;
+    string Reply;
+    fstream socksConf;
 };
 
 class server
 {
 public:
-    server(boost::asio::io_context& io_context, short port)
+    server(short port)
         : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
     {
         do_accept();
@@ -105,7 +170,7 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        server s(io_context, std::atoi(argv[1]));
+        server s(std::atoi(argv[1]));
 
         io_context.run();
     }
