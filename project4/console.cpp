@@ -19,7 +19,15 @@ public:
 private:
 };
 
+class socksInfo {
+public:
+    string hostname;
+    string port;
+private:
+};
+
 npInfo nps[5];
+socksInfo socks;
 
 class client 
 : public enable_shared_from_this<client>
@@ -35,23 +43,55 @@ public:
     }            
 private:
     void do_resolve() {
+        auto endpoints = resolver.resolve(socks.hostname, socks.port);
+        do_connect(endpoints);
+    }
+
+    void do_connect(const tcp::resolver::results_type &endpoints) {
         auto self(shared_from_this());
-        tcp::resolver::query query(nps[targetIndex].hostname, nps[targetIndex].port);
-        resolver.async_resolve(query,
-            [this, self](boost::system::error_code ec, tcp::resolver::iterator it) {
+        boost::asio::async_connect(socket_, endpoints, 
+            [this, self](const boost::system::error_code ec, tcp::endpoint) {
             if(!ec) {
-                do_connect(it);
+                sendSocks4Request();
             }
             });
     }
 
-    void do_connect(tcp::resolver::iterator it) {
+    void sendSocks4Request() {
         auto self(shared_from_this());
-        socket_.async_connect(*it, 
-            [this, self](const boost::system::error_code ec) {
-            if(!ec) {
-                do_read();
-            }
+        unsigned char packet[33];
+        memset(packet, 0, sizeof(packet));
+        packet[0] = 4;
+        packet[1] = 1;
+        packet[2] = stoi(nps[targetIndex].port) / 256;
+        packet[3] = stoi(nps[targetIndex].port) % 256;
+        packet[4] = 0;
+        packet[5] = 0;
+        packet[6] = 0;
+        packet[7] = 1;
+        packet[8] = 0;
+        for (int i = 0; i < (int)nps[targetIndex].hostname.length(); i++)
+            packet[i + 9] = nps[targetIndex].hostname[i];
+        packet[32] = 0;
+        socket_.async_send(boost::asio::buffer(packet, sizeof(packet)),
+            [this, self](boost::system::error_code ec, size_t) {
+                if (!ec) {
+                    recvSocks4Reply();
+                }
+            });
+    }
+
+    void recvSocks4Reply() {
+        auto self(shared_from_this());
+        memset(replyPacket, 0, sizeof(replyPacket));
+        socket_.async_read_some(boost::asio::buffer(replyPacket, sizeof(replyPacket)),
+            [this, self](boost::system::error_code ec, size_t length) {
+                if(!ec) {
+                    if (replyPacket[1] == 90)
+                        do_read();
+                    else
+                        socket_.close();
+                }
             });
     }
 
@@ -103,6 +143,7 @@ private:
         return target;
     }
 
+    unsigned char replyPacket[8];
     int targetIndex;
     fstream fs;
     tcp::socket socket_;
@@ -136,6 +177,14 @@ void handleQuery() {
             nps[index].isUsed = true;
         }
     }
+    pos2 = query.find('&', pos1);
+    temp = query.substr(pos1, pos2 - pos1);
+    pos1 = pos2 + 1;
+    socks.hostname = temp.substr(3);
+    pos2 = query.find('&', pos1);
+    temp = query.substr(pos1, pos2 - pos1);
+    pos1 = pos2 + 1;
+    socks.port = temp.substr(3);
 }
 
 void renderWebsite() {
